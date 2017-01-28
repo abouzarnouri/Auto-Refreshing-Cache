@@ -1,22 +1,22 @@
-AutoRefreshingCache is implemeted in C#. It provides a MemoryCache which tries to refresh hot values before 
-actual expiration time is reached. It gives you a single public method (i.e. GET).
-Here comes the pseudocode of this cache.
+AutoRefreshingCache is a MemoryCache which tries to refresh its hot entries before their actual expiration time is reached.
+This class gives you a single public method (i.e. GET).
+Here comes the pseudocode.
 
 
 get(param)
-	res = cache.get(param)
-	if (res == null)
+	result = cache.get(param)
+	if (result == null)
 		refresh(param, null)
 		return cache.get(param)
-	if (res needs to be refresh)
-		res.refreshWorkers.increment
-		if (res.refreshWorkers == 1)
-			task.run(() => refresh(param, res.refreshWorkers))
+	if (result needs to be refreshed)
+		result.refreshWorkers.increment
+		if (result.refreshWorkers == 1)
+			run refresh(param, res.refreshWorkers) in a new thread
 	return res.data
 
 
 refresh(param, refreshWorkers)
 	data = calc(param)
-	cache.put(key:param, value:{data, now}, expiration:exp_time)
+	cache.add(key:param, value:data, expiration:exp_time)
 	if (refreshWorkers != null)
 		refreshWorkers.decrement
