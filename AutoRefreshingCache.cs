@@ -2,11 +2,10 @@ using System;
 using System.Runtime.Caching;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Practices.Unity.Utility;
 
 namespace Hasin.Taaghche.Utilities
 {
-    public class AutoRefreshingCache<T> where T : RefreshableItem
+    public class AutoRefreshingCache<T> where T : class 
     {
         private readonly MemoryCache _cache;
         private readonly int _expireAfterSeconds;
@@ -21,43 +20,34 @@ namespace Hasin.Taaghche.Utilities
 
         public T Get(string key, Func<T> calc)
         {
-            DateTime? calculateTime = null;
-            var result = Get(key, ref calculateTime);
-            if (result == null)
+            var item = Get(key);
+            if (item == null)
             {
                 Refresh(key, null, calc);
-                return Get(key, ref calculateTime);
+                return Get(key).Value;
             }
 
-            if (calculateTime < DateTime.UtcNow.AddSeconds(-_refreshAfterSeconds))
+            var refreshThreshold = DateTime.UtcNow.AddSeconds(-_refreshAfterSeconds);
+            if (item.CalculationTime < refreshThreshold)
             {
-                if (Interlocked.Increment(ref result.RefreshWorkers) == 1)
+                if (Interlocked.Increment(ref item.RefreshWorkers) == 1)
                 {
                     Task.Run(() =>
                     {
-						Refresh(key, result, calc);
+                        Refresh(key, item, calc);
                     });
                 }
             }
-            return result;
+            return item.Value;
         }
 
-        private T Get(string key, ref DateTime? calculateTime)
-        {
-            var o = _cache.Get(key) as Pair<T, DateTime>;
-            if (o == null)
-                return null;
-            calculateTime = o.Second;
-            return o.First;
-        }
-        
-        private void Refresh(string key, RefreshableItem dataRefreshLock, Func<T> calc)
+        private void Refresh(string key, CacheItemHolder dataRefreshLock, Func<T> calc)
         {
             var data = calc();
             var absoluteExpiration = DateTimeOffset.UtcNow.AddSeconds(_expireAfterSeconds);
             lock (_cache)
             {
-                _cache.Set(key, new Pair<T, DateTime>(data, DateTime.UtcNow), absoluteExpiration);
+                _cache.Set(key, new CacheItemHolder(data), absoluteExpiration);
             }
             if (dataRefreshLock != null)
             {
@@ -65,10 +55,24 @@ namespace Hasin.Taaghche.Utilities
             }
         }
 
-    }
+        private CacheItemHolder Get(string key)
+        {
+            return _cache.Get(key) as CacheItemHolder;
+        }
 
-    public class RefreshableItem
-    {
-        public Int32 RefreshWorkers = 0;
+        class CacheItemHolder
+        {
+            internal readonly T Value;
+            internal Int32 RefreshWorkers;
+            internal readonly DateTime CalculationTime;
+
+            public CacheItemHolder(T value)
+            {
+                Value = value;
+                RefreshWorkers = 0;
+                CalculationTime = DateTime.UtcNow;
+            }
+        }
     }
+    
 }
