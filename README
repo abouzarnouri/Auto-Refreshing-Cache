@@ -6,17 +6,13 @@ Here comes the pseudocode.
 get(param)
 	result = cache.get(param)
 	if (result == null)
-		refresh(param, null)
+		refresh(param)
 		return cache.get(param)
 	if (result needs to be refreshed)
-		result.refreshWorkers.increment
-		if (result.refreshWorkers == 1)
-			run refresh(param, res.refreshWorkers) in a new thread
-	return res.data
+		if (try_lock(result))
+			run refresh(param) in a new thread
+	return result
 
-
-refresh(param, refreshWorkers)
+refresh(param)
 	data = calc(param)
 	cache.add(key:param, value:data, expiration:exp_time)
-	if (refreshWorkers != null)
-		refreshWorkers.decrement
