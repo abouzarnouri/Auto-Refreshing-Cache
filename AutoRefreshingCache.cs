@@ -23,35 +23,31 @@ namespace Hasin.Taaghche.Utilities
             var item = Get(key);
             if (item == null)
             {
-                Refresh(key, null, calc);
+                Refresh(key, calc);
                 return Get(key).Value;
             }
 
             var refreshThreshold = DateTime.UtcNow.AddSeconds(-_refreshAfterSeconds);
             if (item.CalculationTime < refreshThreshold)
             {
-                if (Interlocked.Increment(ref item.RefreshWorkers) == 1)
+                if (Interlocked.Exchange(ref item.RefreshWorkers, 1) == 0)
                 {
                     Task.Run(() =>
                     {
-                        Refresh(key, item, calc);
+                        Refresh(key, calc);
                     });
                 }
             }
             return item.Value;
         }
 
-        private void Refresh(string key, CacheItemHolder dataRefreshLock, Func<T> calc)
+        private void Refresh(string key, Func<T> calc)
         {
             var data = calc();
             var absoluteExpiration = DateTimeOffset.UtcNow.AddSeconds(_expireAfterSeconds);
             lock (_cache)
             {
                 _cache.Set(key, new CacheItemHolder(data), absoluteExpiration);
-            }
-            if (dataRefreshLock != null)
-            {
-                Interlocked.Decrement(ref dataRefreshLock.RefreshWorkers);
             }
         }
 
